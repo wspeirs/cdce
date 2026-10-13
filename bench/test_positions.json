@@ -1,0 +1,161 @@
+{
+  "_comment": [
+    "Hand-built positions for the CDCE eval correctness tests required by",
+    "plan.md §6.3 ('Hand-built positions with exact expected term values').",
+    "Each FEN is a static legal position, not necessarily reachable from the",
+    "startpos by legal play -- that's fine for a unit test.",
+    "",
+    "'expected' values are computed from the CdceParams::default() set (plan 6.2 pseudocode: N=420 R=330 Q=950; not the 'standard' set):",
+    "  VALUE:            P=100 N=420 B=330 R=330 Q=950 K=0",
+    "  ONE_WAY_WEIGHT:   N=12  B=6   R=6   Q=3   P=4   K=0",
+    "  Fork_Bonus:       40 (flat, not phase-scaled -- §6.2 lists no phase column)",
+    "  Rook activity:    off_home_rank=25 (mg only), relative_rank3=20 (mg only),",
+    "                    file_open=25 (both), file_semi_open=12 (both),",
+    "                    connected=10/rook (both), ah_pawn_rank34_gate=8 (gated,",
+    "                    raw phase > 14)",
+    "  one-way formula:  OW[attacker][target] = ONE_WAY_WEIGHT[attacker] * VALUE[target] / 100,",
+    "                    integer division truncating toward zero (Rust i32 '/').",
+    "  phase:            0..=24, weights N=1 B=1 R=2 Q=4 per piece, both sides.",
+    "",
+    "Each position lists only the term(s) it's built to test. Other eval terms",
+    "(mobility, king safety, pawn structure, untested rook-activity bonuses)",
+    "may still be non-zero on these boards; they are out of scope for the",
+    "listed 'expected' entries unless explicitly called out in 'notes'."
+  ],
+
+  "positions": [
+    {
+      "id": "one_way_knight_on_rook",
+      "name": "One-way knight-on-rook",
+      "fen": "7k/8/6r1/4N3/8/8/8/4K3 w - - 0 1",
+      "description": "White knight e5 attacks black rook g6 (e5->g6 is a legal knight move). The rook on g6 attacks along rank 6 and file g, neither of which includes e5, so it cannot attack back: one-way.",
+      "terms_tested": ["one_way_attacks"],
+      "expected": {
+        "one_way_attacks": {
+          "white": "OW[N][R] = 12 * 330 / 100 = 39 (one pair: Ne5 -> Rg6)",
+          "black": 0
+        },
+        "knight_forks": 0,
+        "notes": "Knight attacks exactly one enemy piece, so no fork bonus. Verify eval(white) reflects +39 from this term specifically (isolate by comparing against the same position with the rook removed)."
+      }
+    },
+
+    {
+      "id": "mutual_rook_on_rook",
+      "name": "Mutual rook-on-rook (contributes 0)",
+      "fen": "k2r4/8/8/8/8/8/8/K2R4 w - - 0 1",
+      "description": "White rook d1 and black rook d8 face each other on the open d-file with nothing between (d2-d7 empty); both are on their own home rank. Each attacks the other, so the one-way condition (!att[t].has(a)) fails both ways.",
+      "terms_tested": ["one_way_attacks"],
+      "expected": {
+        "one_way_attacks": {
+          "white": 0,
+          "black": 0
+        },
+        "notes": "Mutual sliders of the same type are always mutual per the §6.2 geometry note, so this term contributes exactly 0 net. Both rooks are on their home rank (no off-home-rank confound) and not on relative rank 3, but the d-file IS open for both, so rook_activity.file_open (+25 both phases) legitimately fires for both rooks independently -- that's a separate term, not part of this check."
+      }
+    },
+
+    {
+      "id": "pawn_attacking_rook",
+      "name": "Pawn attacking a rook",
+      "fen": "k7/8/8/3r4/2P5/8/8/K7 w - - 0 1",
+      "description": "White pawn c4 attacks d5 (one of its two diagonal capture squares), occupied by a black rook. The rook on d5 attacks along rank 5 and file d, neither of which includes c4: one-way.",
+      "terms_tested": ["one_way_attacks"],
+      "expected": {
+        "one_way_attacks": {
+          "white": "OW[P][R] = 4 * 330 / 100 = 13 (one pair: Pc4 -> Rd5)",
+          "black": 0
+        }
+      }
+    },
+
+    {
+      "id": "royal_fork",
+      "name": "Royal fork (knight forks king + queen)",
+      "fen": "3k4/6q1/4N3/8/8/8/8/7K b - - 0 1",
+      "description": "White knight e6 attacks both d8 (black king) and g7 (black queen) simultaneously -- a classic royal fork. FORK_TARGETS = {N, R, Q, K} includes both, so the fork bonus fires. Black is in check and to move.",
+      "terms_tested": ["knight_forks", "one_way_attacks"],
+      "expected": {
+        "knight_forks": {
+          "white": "Fork_Bonus = 40 (att[e6] & black & {N,R,Q,K} = {d8, g7}, count=2 >= 2)"
+        },
+        "one_way_attacks": {
+          "white": [
+            "OW[N][Q] = 12 * 950 / 100 = 114 (Ne6 -> Qg7; queen g7 cannot reach e6: |Δfile|=2, |Δrank|=1, not a line/diagonal)",
+            "OW[N][K] = 12 * 0 / 100 = 0 (Ne6 -> Kd8; king material value is 0 per §6.1, so this pair contributes 0 regardless of one-way-ness)"
+          ]
+        },
+        "notes": "This position exercises both the fork term and the one-way term on the same knight, which is realistic (forks are usually also one-way attacks)."
+      }
+    },
+
+    {
+      "id": "fork_of_two_bishops",
+      "name": "Fork of two bishops (no fork bonus)",
+      "fen": "k7/2b1b3/8/3N4/8/8/8/K7 w - - 0 1",
+      "description": "White knight d5 attacks both c7 and e7, occupied by black bishops. Bishops are NOT in FORK_TARGETS = {N,R,Q,K} (the deliberate deviation from the pseudocode's VALUE-based target selection, §6.2), so no fork bonus despite attacking two pieces.",
+      "terms_tested": ["knight_forks", "one_way_attacks"],
+      "expected": {
+        "knight_forks": {
+          "white": "0 (bishops excluded from FORK_TARGETS, even though count of attacked enemy pieces is 2)"
+        },
+        "one_way_attacks": {
+          "white": "OW[N][B] * 2 = (12 * 330 / 100) * 2 = 39 * 2 = 78 (Nd5 -> Bc7 and Nd5 -> Be7, neither bishop attacks d5 back: |Δfile|=1,|Δrank|=2 for both, not diagonal)"
+        },
+        "notes": "This is the key regression test for the FORK_TARGETS deviation: fork bonus must stay 0 here even though one-way attacks correctly fire twice."
+      }
+    },
+
+    {
+      "id": "open_vs_semi_open_file_open",
+      "name": "Open vs semi-open file -- open-file half",
+      "fen": "k7/8/8/8/8/8/8/3RK3 w - - 0 1",
+      "description": "White rook d1 on a d-file with no pawns of either color. Rook is on its home rank (rank 1) and not on relative rank 3, and is the only rook, so no other rook-activity term fires.",
+      "terms_tested": ["rook_activity.file_open"],
+      "expected": {
+        "rook_activity": "file_open bonus = 25, both phases (PhasedScore(25, 25)); all other rook-activity conditions false"
+      }
+    },
+    {
+      "id": "open_vs_semi_open_file_semi",
+      "name": "Open vs semi-open file -- semi-open-file half",
+      "fen": "k7/3p4/8/8/8/8/8/3RK3 w - - 0 1",
+      "description": "Same as open_vs_semi_open_file_open, but with a black pawn added on d7. White has no pawn on the d-file, black does: semi-open for White.",
+      "terms_tested": ["rook_activity.file_semi_open"],
+      "expected": {
+        "rook_activity": "file_semi_open bonus = 12, both phases (PhasedScore(12, 12)); file_open must NOT also fire"
+      },
+      "notes": "Compare directly against open_vs_semi_open_file_open: the only board difference is the d7 pawn, and the only eval difference should be 25 -> 12 on this term (everything else identical)."
+    },
+
+    {
+      "id": "rook_lift_rank3_full_phase",
+      "name": "Rook lift on relative rank 3 -- full phase",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/R7/PPPPPPPP/1NBQKBNR w Kkq - 0 1",
+      "description": "Standard starting material (phase = 24, the maximum) except White's a1 rook has been lifted to a3 (relative rank 3 for White); a1 is empty, castling rights adjusted to drop White's queenside right. The a-file is blocked by the a2/a7 pawns on both sides (no open/semi-open-file confound).",
+      "terms_tested": ["rook_activity.off_home_rank", "rook_activity.relative_rank3"],
+      "expected": {
+        "phase": 24,
+        "rook_activity": {
+          "raw_mg_sum": "off_home_rank(25) + relative_rank3(20) = 45 (both mg-only, eg=0)",
+          "realized": "(45*phase + 0*(24-phase)) / 24 = (45*24)/24 = 45 at full phase"
+        }
+      }
+    },
+    {
+      "id": "rook_lift_rank3_zero_phase",
+      "name": "Rook lift on relative rank 3 -- (near-)zero phase",
+      "fen": "k7/p7/8/8/8/R7/P7/4K3 w - - 0 1",
+      "description": "Same rook-on-a3 / a-file-blocked-by-pawns setup as rook_lift_rank3_full_phase, but every other N/B/R/Q piece is stripped from the board. Phase cannot be literally 0 while the tested rook is on the board -- a rook alone contributes phase weight R=2 -- so this is the minimum achievable phase (2/24) with the rook present, used as the 'zero phase' endpoint.",
+      "terms_tested": ["rook_activity.off_home_rank", "rook_activity.relative_rank3"],
+      "expected": {
+        "phase": 2,
+        "rook_activity": {
+          "raw_mg_sum": "off_home_rank(25) + relative_rank3(20) = 45 (both mg-only, eg=0)",
+          "realized": "(45*phase + 0*(24-phase)) / 24 = (45*2)/24 = 3.75 -> 3 (Rust integer division truncates toward zero; use the engine's actual tapering/rounding to confirm whether this lands on 3 or 4)"
+        },
+        "notes": "Contrast with rook_lift_rank3_full_phase: same mg-only raw bonus (45), but the realized (phase-tapered) score collapses from 45 to ~3-4 as phase goes from 24 to its practical minimum. This is the test that verifies the mg-only taper actually multiplies by phase instead of being a flat bonus."
+      }
+    }
+  ]
+}

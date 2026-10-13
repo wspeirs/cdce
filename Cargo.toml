@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cdce",
+    "crates/cdce-eval",
+    "crates/cdce-tune",
+]
+exclude = [
+    "vendor/motors",
+]
+
+[workspace.dependencies]
+gears = { path = "vendor/motors/gears" }
+motors = { path = "vendor/motors/motors" }
+pliers = { path = "vendor/motors/pliers" }
+cdce-eval = { path = "crates/cdce-eval" }
+
+[profile.release]
+lto = true
+panic = "abort"
+debug = 1
+
+[profile.bench]
+debug = true
+
+[profile.test]
+opt-level = 1

@@ -1,0 +1,15 @@
+[package]
+name = "cdce"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0"
+description = "Cheap & Deep Chess Engine"
+
+[features]
+default = ["unsafe"]
+unsafe = ["motors/unsafe"]
+
+[dependencies]
+gears = { workspace = true }
+motors = { workspace = true }
+cdce-eval = { workspace = true }

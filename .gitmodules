@@ -1,0 +1,3 @@
+[submodule "vendor/motors"]
+	path = vendor/motors
+	url = https://github.com/toanth/motors.git

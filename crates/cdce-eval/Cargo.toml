@@ -1,0 +1,20 @@
+[package]
+name = "cdce-eval"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0"
+description = "CDCE evaluation functions"
+
+[dependencies]
+gears = { workspace = true }
+motors = { workspace = true }
+
+[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+criterion = "0.8.2"
+
+
+[[bench]]
+name = "eval_cost"
+harness = false
